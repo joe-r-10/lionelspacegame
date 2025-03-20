@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Assets - Lionel's Space Adventure</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+        h1, h2 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .instructions {
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        .preview {
+            margin: 10px;
+            text-align: center;
+            width: 150px;
+        }
+        .preview img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+            background-color: #fff;
+        }
+        .preview p {
+            margin-top: 5px;
+            font-size: 12px;
+        }
+        .audio-preview {
+            margin: 10px;
+            text-align: center;
+            width: 200px;
+        }
+        .audio-preview p {
+            margin-top: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generate Assets for Lionel's Space Adventure</h1>
+        <div class="instructions">
+            <p>Use the buttons below to generate all the necessary game assets. The assets will be downloaded to your computer. After downloading, move the files to their respective folders in the 'public/assets' directory.</p>
+        </div>
+        
+        <h2>Image Assets</h2>
+        <div class="instructions">
+            <ul>
+                <li>Player assets: Move to <code>public/assets/player/</code></li>
+                <li>Enemy assets: Move to <code>public/assets/enemies/</code></li>
+                <li>Powerup assets: Move to <code>public/assets/powerups/</code></li>
+                <li>Background assets: Move to <code>public/assets/backgrounds/</code></li>
+            </ul>
+        </div>
+        <button id="generate-images-button">Generate Image Assets</button>
+        <div class="preview-container" id="image-preview-container"></div>
+        
+        <h2>Audio Assets</h2>
+        <div class="instructions">
+            <p>Audio assets need to be moved to <code>public/assets/audio/</code> after downloading.</p>
+        </div>
+        <button id="generate-audio-button">Generate Audio Assets</button>
+        <div class="preview-container" id="audio-preview-container"></div>
+    </div>
+
+    <script src="src/utils/asset-generator.js"></script>
+    <script src="src/utils/audio-generator.js"></script>
+    <script>
+        document.getElementById('generate-images-button').addEventListener('click', () => {
+            // Generate assets and display previews
+            const previewContainer = document.getElementById('image-preview-container');
+            previewContainer.innerHTML = '';
+            
+            // Generate and preview Lionel
+            const lionelDataURL = window.assetGenerator.drawLionel();
+            addImagePreview(lionelDataURL, 'lionel.png', 'Player character');
+            
+            // Generate and preview laser
+            const laserDataURL = window.assetGenerator.drawLaser();
+            addImagePreview(laserDataURL, 'laser.png', 'Laser beam');
+            
+            // Generate and preview enemies
+            const basicShipDataURL = window.assetGenerator.drawEnemyBasic();
+            addImagePreview(basicShipDataURL, 'basic-ship.png', 'Basic enemy');
+            
+            const fastScoutDataURL = window.assetGenerator.drawEnemyFast();
+            addImagePreview(fastScoutDataURL, 'fast-scout.png', 'Fast enemy');
+            
+            const bossShipDataURL = window.assetGenerator.drawEnemyBoss();
+            addImagePreview(bossShipDataURL, 'boss-ship.png', 'Boss enemy');
+            
+            // Generate and preview treats
+            const speedTreatDataURL = window.assetGenerator.drawTreat('#FF0000');
+            addImagePreview(speedTreatDataURL, 'speed-treat.png', 'Speed boost');
+            
+            const doubleShotTreatDataURL = window.assetGenerator.drawTreat('#0000FF');
+            addImagePreview(doubleShotTreatDataURL, 'double-shot-treat.png', 'Double shot');
+            
+            const shieldTreatDataURL = window.assetGenerator.drawTreat('#00FF00');
+            addImagePreview(shieldTreatDataURL, 'shield-treat.png', 'Shield');
+            
+            const comboTreatDataURL = window.assetGenerator.drawTreat('#FFD700');
+            addImagePreview(comboTreatDataURL, 'combo-treat.png', 'Combo treat');
+            
+            // Generate and preview backgrounds
+            const bgDataURL = window.assetGenerator.drawBackground();
+            addImagePreview(bgDataURL, 'space-bg.png', 'Space background');
+            
+            const starsDataURL = window.assetGenerator.drawStars();
+            addImagePreview(starsDataURL, 'stars.png', 'Stars');
+            
+            // Download all assets
+            downloadImage(lionelDataURL, 'lionel.png');
+            downloadImage(laserDataURL, 'laser.png');
+            downloadImage(basicShipDataURL, 'basic-ship.png');
+            downloadImage(fastScoutDataURL, 'fast-scout.png');
+            downloadImage(bossShipDataURL, 'boss-ship.png');
+            downloadImage(speedTreatDataURL, 'speed-treat.png');
+            downloadImage(doubleShotTreatDataURL, 'double-shot-treat.png');
+            downloadImage(shieldTreatDataURL, 'shield-treat.png');
+            downloadImage(comboTreatDataURL, 'combo-treat.png');
+            downloadImage(bgDataURL, 'space-bg.png');
+            downloadImage(starsDataURL, 'stars.png');
+        });
+        
+        document.getElementById('generate-audio-button').addEventListener('click', () => {
+            // Display audio previews
+            const audioPreviewContainer = document.getElementById('audio-preview-container');
+            audioPreviewContainer.innerHTML = '';
+            
+            // Add audio previews
+            addAudioPreview('laser.mp3', 'Laser sound');
+            addAudioPreview('explosion.mp3', 'Explosion sound');
+            addAudioPreview('powerup.mp3', 'Powerup sound');
+            addAudioPreview('game-over.mp3', 'Game over sound');
+            addAudioPreview('background-music.mp3', 'Background music');
+            
+            // Generate audio files
+            window.audioGenerator.generateAudio();
+        });
+        
+        function addImagePreview(dataURL, filename, description) {
+            const previewContainer = document.getElementById('image-preview-container');
+            
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'preview';
+            
+            const img = document.createElement('img');
+            img.src = dataURL;
+            img.alt = filename;
+            
+            const name = document.createElement('p');
+            name.textContent = filename;
+            
+            const desc = document.createElement('p');
+            desc.textContent = description;
+            
+            previewDiv.appendChild(img);
+            previewDiv.appendChild(name);
+            previewDiv.appendChild(desc);
+            
+            previewContainer.appendChild(previewDiv);
+        }
+        
+        function addAudioPreview(filename, description) {
+            const previewContainer = document.getElementById('audio-preview-container');
+            
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'audio-preview';
+            
+            const audioIcon = document.createElement('div');
+            audioIcon.innerHTML = '🔊';
+            audioIcon.style.fontSize = '32px';
+            
+            const name = document.createElement('p');
+            name.textContent = filename;
+            
+            const desc = document.createElement('p');
+            desc.textContent = description;
+            
+            previewDiv.appendChild(audioIcon);
+            previewDiv.appendChild(name);
+            previewDiv.appendChild(desc);
+            
+            previewContainer.appendChild(previewDiv);
+        }
+        
+        function downloadImage(dataURL, filename) {
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html> 
