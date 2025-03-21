@@ -1,4 +1,5 @@
 import 'phaser';
+import { saveScore } from '../../utils/firebase';
 
 /**
  * Game Scene - Main gameplay scene
@@ -788,14 +789,17 @@ export default class GameScene extends Phaser.Scene {
 
     async submitScore(name, score) {
         try {
-            // For now, just store locally since we don't have a backend
+            // Save score to global Firebase database
+            await saveScore(name, score);
+            
+            // Also save locally for offline play
             const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
             scores.push({ name, score, date: new Date().toISOString() });
             scores.sort((a, b) => b.score - a.score);
             localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
 
             // Show success message
-            const successText = this.add.text(400, 580, 'Score saved!', {
+            const successText = this.add.text(400, 580, 'Score saved to global leaderboard!', {
                 font: '20px Arial',
                 fill: '#00FF00'
             });
@@ -808,12 +812,23 @@ export default class GameScene extends Phaser.Scene {
         } catch (error) {
             console.error('Error saving score:', error);
             
+            // If there's an error with Firebase, still save locally
+            const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
+            scores.push({ name, score, date: new Date().toISOString() });
+            scores.sort((a, b) => b.score - a.score);
+            localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
+            
             // Show error message
-            const errorText = this.add.text(400, 580, 'Could not save score.', {
+            const errorText = this.add.text(400, 580, 'Saved locally. Could not connect to global leaderboard.', {
                 font: '20px Arial',
-                fill: '#FF0000'
+                fill: '#FF9900'
             });
             errorText.setOrigin(0.5);
+            
+            // Start menu scene after a short delay
+            this.time.delayedCall(2000, () => {
+                this.transitionToScene('MenuScene');
+            });
         }
     }
 
@@ -823,10 +838,10 @@ export default class GameScene extends Phaser.Scene {
         // Handle keyboard controls
         if (this.cursors.left.isDown) {
             this.keyboardMovement = true;
-            this.targetX = this.player.x - (this.moveSpeed * delta / 1000) * 2;
+            this.targetX = this.player.x - (this.moveSpeed * delta / 1000) * 6;
         } else if (this.cursors.right.isDown) {
             this.keyboardMovement = true;
-            this.targetX = this.player.x + (this.moveSpeed * delta / 1000) * 2;
+            this.targetX = this.player.x + (this.moveSpeed * delta / 1000) * 6;
         } else if (this.keyboardMovement) {
             this.keyboardMovement = false;
         }
