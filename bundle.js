@@ -209,8 +209,8 @@ class MenuScene extends Phaser.Scene {
   }
   create() {
     // Add background
-    this.add.tileSprite(400, 300, 800, 600, 'background');
-    this.add.tileSprite(400, 300, 800, 600, 'stars');
+    this.background = this.add.tileSprite(400, 300, 800, 600, 'background');
+    this.stars = this.add.tileSprite(400, 300, 800, 600, 'stars');
 
     // Create main container
     const mainContainer = this.add.container(400, 300);
@@ -314,6 +314,10 @@ class MenuScene extends Phaser.Scene {
       });
       controlsText.setOrigin(0.5);
     }
+  }
+  update() {
+    // Scroll the stars background
+    this.stars.tilePositionY -= 0.5;
   }
   addPreviewItem(container, x, y, sprite, label) {
     let scale = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : 1;
@@ -19029,7 +19033,7 @@ class GameScene extends Phaser.Scene {
         enemy.setTint(0x00ff00);
         break;
       case 'enemy-fast':
-        enemy.setTint(0x0000ff);
+        enemy.setTint(0x00ffff); // Change to cyan (light blue) for better visibility
         break;
     }
   }
@@ -19073,14 +19077,12 @@ class GameScene extends Phaser.Scene {
       callbackScope: this,
       loop: true
     });
-    this.player.setTint(0xff0000);
     this.showPowerupText('Speed Boost!', '#ff0000');
   }
   activateDoubleShot() {
     // Clear any existing double shot
     this.powerupStates.doubleShot.active = true;
     this.powerupStates.doubleShot.duration = this.powerupStates.doubleShot.maxDuration;
-    this.player.setTint(0x0000ff);
     this.showPowerupText('Double Shot!', '#0000ff');
   }
   activateShield() {
@@ -19095,12 +19097,10 @@ class GameScene extends Phaser.Scene {
     this.shieldSprite = this.add.graphics();
     this.shieldSprite.lineStyle(4, 0x00ff00, 1);
     this.shieldSprite.lineBetween(-50, 0, 50, 0);
-    this.player.setTint(0x00ff00);
     this.showPowerupText('Shield Active!', '#00ff00');
   }
   activateCombo() {
     this.showPowerupText('All Power-ups!', '#ffff00');
-    this.player.setTint(0xffff00); // Gold tint for combo
 
     // Activate all powerups with fresh durations
     this.activateSpeedBoost();
@@ -19133,13 +19133,6 @@ class GameScene extends Phaser.Scene {
         }
       }
     });
-
-    // Update player tint based on active powerups
-    if (activePowerups === 0) {
-      this.player.clearTint();
-    } else if (activePowerups === 3) {
-      this.player.setTint(0xffff00); // Gold for all powerups
-    }
   }
   collectPowerup(player, powerup) {
     powerup.destroy();
@@ -19277,7 +19270,6 @@ class GameScene extends Phaser.Scene {
       }
       this.powerupStates.shield.active = false;
       this.powerupStates.shield.duration = 0;
-      this.player.clearTint();
     }
   }
   gameOver() {
@@ -19334,19 +19326,42 @@ class GameScene extends Phaser.Scene {
     levelText.setOrigin(0.5);
 
     // Create name input for leaderboard
-    const nameText = this.add.text(400, 320, 'Enter your name:', {
+    const nameText = this.add.text(400, 320, 'Enter your name for the leaderboard:', {
       font: '24px Arial',
       fill: '#ffffff'
     });
     nameText.setOrigin(0.5);
 
-    // Create input box (simulated with a text object)
-    const inputBox = this.add.rectangle(400, 360, 300, 40, 0x000000, 0.7);
+    // Create input box with better styling
+    const inputBox = this.add.rectangle(400, 360, 300, 40, 0x333333, 0.9);
+    inputBox.setStrokeStyle(2, 0x4CAF50, 1);
     const inputText = this.add.text(400, 360, '', {
       font: '20px Arial',
       fill: '#ffffff'
     });
     inputText.setOrigin(0.5);
+
+    // Add connection status indicator
+    const connectionStatus = this.add.text(400, 390, 'Checking leaderboard connection...', {
+      font: '16px Arial',
+      fill: '#ffff00'
+    });
+    connectionStatus.setOrigin(0.5);
+
+    // Check Firebase connection
+    fetch('https://spacedoggame-public-default-rtdb.firebaseio.com/.json?shallow=true').then(response => {
+      if (response.ok) {
+        connectionStatus.setText('Status: Global leaderboard connected');
+        connectionStatus.setFill('#00ff00');
+      } else {
+        connectionStatus.setText('Status: Using local leaderboard only');
+        connectionStatus.setFill('#ff9900');
+      }
+    }).catch(error => {
+      console.error("Connection check error:", error);
+      connectionStatus.setText('Status: Using local leaderboard only');
+      connectionStatus.setFill('#ff9900');
+    });
 
     // Add a blinking cursor
     const cursor = this.add.text(inputText.x + inputText.width / 2 + 5, inputText.y, '|', {
@@ -19384,7 +19399,7 @@ class GameScene extends Phaser.Scene {
     });
 
     // Submit score button
-    const submitButton = this.add.text(400, 420, 'Submit Score', {
+    const submitButton = this.add.text(400, 430, 'Submit Score', {
       font: '24px Arial',
       fill: '#ffffff',
       backgroundColor: '#4CAF50',
@@ -19393,9 +19408,47 @@ class GameScene extends Phaser.Scene {
         y: 10
       }
     }).setOrigin(0.5).setInteractive();
+
+    // Add button hover effects
+    submitButton.on('pointerover', () => {
+      submitButton.setStyle({
+        fill: '#ffffff',
+        backgroundColor: '#66BB6A'
+      });
+    });
+    submitButton.on('pointerout', () => {
+      submitButton.setStyle({
+        fill: '#ffffff',
+        backgroundColor: '#4CAF50'
+      });
+    });
     submitButton.on('pointerdown', () => {
       if (inputText.text.length > 0) {
+        // Visual feedback
+        submitButton.setStyle({
+          fill: '#ffffff',
+          backgroundColor: '#1B5E20'
+        });
+        submitButton.setText('Submitting...');
+
+        // Disable further clicks
+        submitButton.disableInteractive();
+
+        // Submit score
         this.submitScore(inputText.text, this.game.globals.score);
+      } else {
+        // Visual feedback for empty name
+        inputBox.setStrokeStyle(2, 0xff0000, 1);
+        this.time.delayedCall(300, () => inputBox.setStrokeStyle(2, 0x4CAF50, 1));
+
+        // Add warning message
+        const warningText = this.add.text(400, 470, 'Please enter a name first!', {
+          font: '18px Arial',
+          fill: '#ff0000'
+        }).setOrigin(0.5);
+
+        // Remove warning after 2 seconds
+        this.time.delayedCall(2000, () => warningText.destroy());
       }
     });
 
@@ -19428,19 +19481,40 @@ class GameScene extends Phaser.Scene {
     });
   }
   async submitScore(name, score) {
+    console.log(`GameScene submitting score: ${name}, ${score}`);
+
+    // Create a loading indicator
+    const loadingText = this.add.text(400, 540, 'Saving score...', {
+      font: '20px Arial',
+      fill: '#ffffff'
+    }).setOrigin(0.5);
     try {
+      // Sanitize inputs
+      const playerName = String(name || "Player").trim() || "Player";
+      const playerScore = Number(score) || 0;
+
       // Save score to global Firebase database
-      await saveScore(name, score);
+      console.log(`Calling Firebase saveScore with: ${playerName}, ${playerScore}`);
+      const result = await saveScore(playerName, playerScore);
+      console.log("Firebase save result:", result);
 
       // Also save locally for offline play
-      const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
-      scores.push({
-        name,
-        score,
-        date: new Date().toISOString()
-      });
-      scores.sort((a, b) => b.score - a.score);
-      localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
+      try {
+        const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
+        scores.push({
+          name: playerName,
+          score: playerScore,
+          date: new Date().toISOString()
+        });
+        scores.sort((a, b) => b.score - a.score);
+        localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
+        console.log("Score saved locally");
+      } catch (localError) {
+        console.error("Error saving score locally:", localError);
+      }
+
+      // Remove loading indicator
+      loadingText.destroy();
 
       // Show success message
       const successText = this.add.text(400, 580, 'Score saved to global leaderboard!', {
@@ -19454,17 +19528,27 @@ class GameScene extends Phaser.Scene {
         this.transitionToScene('MenuScene');
       });
     } catch (error) {
-      console.error('Error saving score:', error);
+      console.error('Error saving score to Firebase:', error);
+
+      // Remove loading indicator
+      loadingText.destroy();
 
       // If there's an error with Firebase, still save locally
-      const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
-      scores.push({
-        name,
-        score,
-        date: new Date().toISOString()
-      });
-      scores.sort((a, b) => b.score - a.score);
-      localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
+      try {
+        const playerName = String(name || "Player").trim() || "Player";
+        const playerScore = Number(score) || 0;
+        const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
+        scores.push({
+          name: playerName,
+          score: playerScore,
+          date: new Date().toISOString()
+        });
+        scores.sort((a, b) => b.score - a.score);
+        localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
+        console.log("Score saved locally after Firebase error");
+      } catch (localError) {
+        console.error("Error saving score locally after Firebase error:", localError);
+      }
 
       // Show error message
       const errorText = this.add.text(400, 580, 'Saved locally. Could not connect to global leaderboard.', {
