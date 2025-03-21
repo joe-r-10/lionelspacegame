@@ -373,6 +373,7 @@ class GameScene extends Phaser.Scene {
     this.moveSpeed = 300;
     this.baseSpeed = 300;
     this.boostSpeed = 500;
+    this.keyboardMovement = false; // Flag to track if keyboard is being used
 
     // Level progression settings
     this.enemySpawnDelay = 2000;
@@ -400,6 +401,9 @@ class GameScene extends Phaser.Scene {
     } else {
       this.setupDesktopControls();
     }
+
+    // Set up keyboard controls
+    this.setupKeyboardControls();
 
     // Set up UI
     this.setupUI();
@@ -498,6 +502,10 @@ class GameScene extends Phaser.Scene {
         this.targetX = Phaser.Math.Clamp(pointer.x, 0, 800);
       }
     });
+  }
+  setupKeyboardControls() {
+    // Set up cursor keys
+    this.cursors = this.input.keyboard.createCursorKeys();
   }
   setupPauseButton() {
     // Create pause button
@@ -1126,24 +1134,41 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.isPaused || this.isGameOver) return;
 
+    // Handle keyboard controls
+    if (this.cursors.left.isDown) {
+      this.keyboardMovement = true;
+      this.targetX = this.player.x - this.moveSpeed * delta / 1000 * 2;
+    } else if (this.cursors.right.isDown) {
+      this.keyboardMovement = true;
+      this.targetX = this.player.x + this.moveSpeed * delta / 1000 * 2;
+    } else if (this.keyboardMovement) {
+      this.keyboardMovement = false;
+    }
+
+    // Clamp the target position within the screen bounds
+    this.targetX = Phaser.Math.Clamp(this.targetX, this.player.width / 2, 800 - this.player.width / 2);
+
+    // Move the player toward the target position
+    const dx = this.targetX - this.player.x;
+    if (Math.abs(dx) > 1) {
+      this.player.x += dx * 0.2;
+    } else {
+      this.player.x = this.targetX;
+    }
+
+    // Scroll the stars background
+    if (this.backgroundScrolling) {
+      this.stars.tilePositionY -= 0.5;
+    }
+
     // Update powerups
     this.updatePowerups(delta);
     this.updatePowerupUI();
-
-    // Update player position with smooth movement
-    const dx = this.targetX - this.player.x;
-    const movement = Math.sign(dx) * Math.min(Math.abs(dx), this.moveSpeed * delta / 1000);
-    this.player.x += movement;
 
     // Update shield position if active
     if (this.shieldSprite && this.powerupStates.shield.active) {
       this.shieldSprite.x = this.player.x;
       this.shieldSprite.y = this.player.y - 40; // Position shield higher above player
-    }
-
-    // Only scroll stars, not background
-    if (this.backgroundScrolling) {
-      this.stars.tilePositionY -= 4;
     }
 
     // Check collisions
@@ -1466,7 +1491,7 @@ class HowToPlayScene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 4
     }).setOrigin(0.5);
-    const controlsText = this.add.text(0, 10, ['Move: Use mouse or touch to move left/right', 'Shooting: Your ship fires automatically'], {
+    const controlsText = this.add.text(0, 10, ['Move: Use ← → arrow keys or mouse/touch', 'Shooting: Your ship fires automatically'], {
       font: '22px Arial',
       fill: '#ffffff',
       align: 'center',
