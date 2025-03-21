@@ -138,7 +138,7 @@ export default class HowToPlayScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         const controlsText = this.add.text(0, 10, [
-            'Move: Use mouse or touch to move left/right',
+            'Move: Use ← → arrow keys or mouse/touch',
             'Shooting: Your ship fires automatically'
         ], {
             font: '22px Arial',
