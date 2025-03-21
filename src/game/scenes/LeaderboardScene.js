@@ -1,5 +1,5 @@
 import 'phaser';
-import { getTopScores } from '../../utils/firebase';
+import { getTopScores, testConnection } from '../../utils/firebase';
 
 /**
  * Leaderboard Scene - Displays game leaderboard
@@ -11,6 +11,7 @@ export default class LeaderboardScene extends Phaser.Scene {
         this.scores = [];
         this.localScores = [];
         this.isLoading = true;
+        this.connectionStatus = 'checking'; // 'checking', 'connected', 'disconnected'
     }
 
     create() {
@@ -84,8 +85,16 @@ export default class LeaderboardScene extends Phaser.Scene {
             this.updateLeaderboard();
         });
 
+        // Create connection status indicator
+        this.connectionIndicator = this.add.text(400, 100, 'Checking connection...', {
+            font: '18px Arial',
+            fill: '#ffff00',
+            backgroundColor: '#333333',
+            padding: { x: 10, y: 5 }
+        }).setOrigin(0.5);
+
         // Create leaderboard container
-        this.container = this.add.container(400, 200);
+        this.container = this.add.container(400, 240);
 
         // Show loading message
         this.loadingText = this.add.text(400, 300, 'Loading scores...', {
@@ -99,8 +108,53 @@ export default class LeaderboardScene extends Phaser.Scene {
             .sort((a, b) => b.score - a.score)
             .slice(0, 10); // Only show top 10
 
-        // Load global scores
-        this.loadGlobalScores();
+        // Check Firebase connection
+        this.checkFirebaseConnection();
+    }
+
+    async checkFirebaseConnection() {
+        try {
+            // Test Firebase connection status
+            this.connectionStatus = 'checking';
+            this.connectionIndicator.setText('Checking connection...');
+            this.connectionIndicator.setFill('#ffff00');
+            
+            const isConnected = await testConnection();
+            
+            if (isConnected) {
+                this.connectionStatus = 'connected';
+                this.connectionIndicator.setText('Firebase: Connected');
+                this.connectionIndicator.setFill('#00ff00');
+                
+                // Load global scores
+                this.loadGlobalScores();
+            } else {
+                this.connectionStatus = 'disconnected';
+                this.connectionIndicator.setText('Firebase: Disconnected (using local scores)');
+                this.connectionIndicator.setFill('#ff9900');
+                
+                // Auto-switch to local if not connected
+                this.isGlobal = false;
+                this.isLoading = false;
+                if (this.loadingText) {
+                    this.loadingText.destroy();
+                }
+                this.updateLeaderboard();
+            }
+        } catch (error) {
+            console.error('Error checking Firebase connection:', error);
+            this.connectionStatus = 'disconnected';
+            this.connectionIndicator.setText('Firebase: Error (using local scores)');
+            this.connectionIndicator.setFill('#ff0000');
+            
+            // Auto-switch to local on error
+            this.isGlobal = false;
+            this.isLoading = false;
+            if (this.loadingText) {
+                this.loadingText.destroy();
+            }
+            this.updateLeaderboard();
+        }
     }
 
     async loadGlobalScores() {
@@ -114,6 +168,9 @@ export default class LeaderboardScene extends Phaser.Scene {
         } catch (error) {
             console.error('Error loading global scores:', error);
             this.isLoading = false;
+            this.connectionIndicator.setText(`Firebase Error: ${error.message}`);
+            this.connectionIndicator.setFill('#ff0000');
+            
             if (this.loadingText) {
                 this.loadingText.setText('Could not load global scores. Showing local scores.');
                 
@@ -128,9 +185,32 @@ export default class LeaderboardScene extends Phaser.Scene {
     }
 
     updateLeaderboard() {
-        // Update title and toggle button
-        this.titleText.setText(this.isGlobal ? 'Global Leaderboard' : 'Local Leaderboard');
-        this.toggleButton.setText(this.isGlobal ? 'Switch to Local' : 'Switch to Global');
+        // Update title and toggle button based on connection status
+        if (this.isGlobal) {
+            this.titleText.setText('Global Leaderboard');
+            this.toggleButton.setText('Switch to Local');
+            
+            // If we're not connected but trying to show global, force local
+            if (this.connectionStatus !== 'connected') {
+                this.isGlobal = false;
+                this.titleText.setText('Local Leaderboard');
+                this.toggleButton.setText('Global Unavailable');
+                this.toggleButton.disableInteractive();
+                this.toggleButton.setStyle({ backgroundColor: '#666666' });
+            }
+        } else {
+            this.titleText.setText('Local Leaderboard');
+            
+            if (this.connectionStatus === 'connected') {
+                this.toggleButton.setText('Switch to Global');
+                this.toggleButton.setInteractive();
+                this.toggleButton.setStyle({ backgroundColor: '#333333' });
+            } else {
+                this.toggleButton.setText('Global Unavailable');
+                this.toggleButton.disableInteractive();
+                this.toggleButton.setStyle({ backgroundColor: '#666666' });
+            }
+        }
 
         // Clear existing scores
         this.container.removeAll();
