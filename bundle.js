@@ -18593,9 +18593,59 @@ const firebaseConfig = {
   appId: "1:115878278642:web:15e4a92f348e11fde26bc7"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+// Debug flag
+const DEBUG = true;
+const debug = (message, data) => {
+  if (DEBUG) {
+    if (data) {
+      console.log(`[FIREBASE DEBUG] ${message}`, data);
+    } else {
+      console.log(`[FIREBASE DEBUG] ${message}`);
+    }
+  }
+};
+
+// Initialize Firebase with enhanced error handling
+let app;
+let database;
+let dbInitialized = false;
+function initializeFirebase() {
+  if (app) {
+    debug("Firebase already initialized, skipping initialization");
+    return;
+  }
+  debug("Starting Firebase initialization...");
+  try {
+    // Initialize the app
+    app = initializeApp(firebaseConfig);
+    database = getDatabase(app);
+    debug("Firebase core initialized");
+
+    // Verify database connection
+    const testRef = ref(database, '.info/connected');
+    onValue(testRef, snapshot => {
+      dbInitialized = snapshot.val() === true;
+      debug(`Firebase connection status: ${dbInitialized ? "Connected" : "Disconnected"}`);
+    });
+
+    // Do a simple read operation to verify database access
+    const rootRef = ref(database);
+    onValue(rootRef, () => {
+      debug("Successfully connected to database root");
+    }, error => {
+      debug(`Error connecting to database root: ${error.message}`, error);
+    });
+    debug("Firebase initialization complete");
+    return true;
+  } catch (error) {
+    debug("Firebase initialization error", error);
+    console.error("Firebase initialization error:", error);
+    return false;
+  }
+}
+
+// Initialize Firebase when module is imported
+initializeFirebase();
 
 /**
  * Saves a score to the global leaderboard
@@ -18604,18 +18654,87 @@ const database = getDatabase(app);
  * @returns {Promise} - Promise with the result
  */
 const saveScore = async (name, score) => {
+  debug(`Attempting to save score: ${name}, ${score}`);
+
+  // If Firebase is not initialized, try to initialize it
+  if (!database) {
+    debug("Database not initialized, attempting to initialize...");
+    if (!initializeFirebase()) {
+      debug("Failed to initialize Firebase");
+      console.error("Firebase database not initialized and initialization failed");
+      return Promise.reject(new Error("Firebase database not initialized"));
+    }
+  }
   try {
+    // Ensure score is a number
+    const numericScore = Number(score);
+    if (isNaN(numericScore)) {
+      debug(`Invalid score format: ${score}`);
+      console.error("Invalid score format:", score);
+      return Promise.reject(new Error("Score must be a number"));
+    }
+
+    // Ensure name is valid
+    const playerName = String(name || "Player").trim();
+    if (!playerName) {
+      debug(`Invalid player name: ${name}`);
+      console.error("Invalid player name:", name);
+      return Promise.reject(new Error("Player name cannot be empty"));
+    }
+
+    // Create score data object
+    const scoreData = {
+      name: playerName,
+      score: numericScore,
+      date: new Date().toISOString(),
+      timestamp: serverTimestamp()
+    };
+    debug(`Saving score to Firebase:`, scoreData);
     const scoresRef = ref(database, 'scores');
-    const result = await push(scoresRef, {
-      name,
-      score,
-      date: new Date().toISOString()
-    });
+    const result = await push(scoresRef, scoreData);
+    debug(`Score saved successfully with key: ${result.key}`);
+    console.log("Score saved successfully to Firebase:", result.key);
     return result;
   } catch (error) {
-    console.error('Error saving score:', error);
-    throw error;
+    debug(`Error saving score to Firebase: ${error.message}`, error);
+    console.error('Error saving score to Firebase:', error);
+    return Promise.reject(error);
   }
+};
+
+/**
+ * Tests the Firebase connection directly
+ * @returns {Promise<boolean>} - Promise that resolves to true if connected
+ */
+const testConnection = () => {
+  debug("Testing Firebase connection...");
+  return new Promise(resolve => {
+    if (!database) {
+      debug("Database not initialized, attempting to initialize...");
+      if (!initializeFirebase()) {
+        debug("Failed to initialize Firebase during connection test");
+        resolve(false);
+        return;
+      }
+    }
+    const testRef = ref(database, '.info/connected');
+
+    // Set a timeout in case onValue never fires
+    const timeout = setTimeout(() => {
+      debug("Connection test timed out");
+      resolve(false);
+    }, 5000);
+    onValue(testRef, snapshot => {
+      clearTimeout(timeout);
+      const isConnected = snapshot.val() === true;
+      debug(`Connection test result: ${isConnected ? "Connected" : "Disconnected"}`);
+      resolve(isConnected);
+    }, error => {
+      clearTimeout(timeout);
+      debug(`Connection test error: ${error.message}`, error);
+      resolve(false);
+    });
+  });
 };
 
 /**
@@ -18625,30 +18744,67 @@ const saveScore = async (name, score) => {
  */
 const getTopScores = function () {
   let limit = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 10;
+  debug(`Fetching top ${limit} scores from Firebase...`);
   return new Promise((resolve, reject) => {
+    // If Firebase is not initialized, try to initialize it
+    if (!database) {
+      debug("Database not initialized, attempting to initialize...");
+      if (!initializeFirebase()) {
+        debug("Failed to initialize Firebase");
+        console.error("Firebase database not initialized and initialization failed");
+        reject(new Error("Firebase database not initialized"));
+        return;
+      }
+    }
     const scoresRef = ref(database, 'scores');
     const topScoresQuery = query(scoresRef, orderByChild('score'), limitToLast(limit));
-    onValue(topScoresQuery, snapshot => {
-      const scores = [];
-      snapshot.forEach(childSnapshot => {
-        scores.push({
-          id: childSnapshot.key,
-          ...childSnapshot.val()
-        });
-      });
 
-      // Sort scores in descending order
-      scores.sort((a, b) => b.score - a.score);
-      resolve(scores);
+    // Set timeout for Firebase query
+    const timeout = setTimeout(() => {
+      debug("Firebase query timed out after 10 seconds");
+      console.error("Firebase query timed out after 10 seconds");
+      reject(new Error("Firebase query timed out"));
+    }, 10000);
+    onValue(topScoresQuery, snapshot => {
+      clearTimeout(timeout);
+      const scores = [];
+      try {
+        debug(`Raw snapshot received, has children: ${snapshot.exists()}`);
+        snapshot.forEach(childSnapshot => {
+          const scoreData = childSnapshot.val();
+          debug(`Processing score: ${childSnapshot.key}`, scoreData);
+          scores.push({
+            id: childSnapshot.key,
+            name: scoreData.name || "Unknown",
+            score: Number(scoreData.score) || 0,
+            date: scoreData.date || new Date().toISOString()
+          });
+        });
+
+        // Sort scores in descending order
+        scores.sort((a, b) => b.score - a.score);
+        debug(`Successfully fetched ${scores.length} scores from Firebase`, scores);
+        console.log(`Successfully fetched ${scores.length} scores from Firebase`);
+        resolve(scores);
+      } catch (error) {
+        debug(`Error processing score data: ${error.message}`, error);
+        console.error("Error processing score data:", error);
+        reject(error);
+      }
     }, error => {
-      console.error('Error fetching scores:', error);
+      clearTimeout(timeout);
+      debug(`Error fetching scores from Firebase: ${error.message}`, error);
+      console.error('Error fetching scores from Firebase:', error);
       reject(error);
     });
   });
 };
+
+// Export testConnection as well as the existing functions
 /* harmony default export */ const firebase = ({
   saveScore,
-  getTopScores
+  getTopScores,
+  testConnection
 });
 ;// ./src/game/scenes/GameScene.js
 
@@ -18764,6 +18920,9 @@ class GameScene extends Phaser.Scene {
       callbackScope: this,
       loop: true
     });
+
+    // Run a direct Firebase test on game start to identify any issues
+    this.testFirebaseConnection();
   }
   setupPowerupUI() {
     // Create powerup UI container
@@ -19488,18 +19647,43 @@ class GameScene extends Phaser.Scene {
       font: '20px Arial',
       fill: '#ffffff'
     }).setOrigin(0.5);
+
+    // Also display debugging info
+    const debugText = this.add.text(400, 510, 'Contacting leaderboard...', {
+      font: '16px Arial',
+      fill: '#cccccc'
+    }).setOrigin(0.5);
     try {
+      // First verify Firebase connection
+      debugText.setText('Testing Firebase connection...');
+      const isConnected = await testConnection();
+      debugText.setText(`Firebase connection: ${isConnected ? "Connected" : "Disconnected"}`);
+
       // Sanitize inputs
       const playerName = String(name || "Player").trim() || "Player";
       const playerScore = Number(score) || 0;
+      let submitSuccess = false;
+      let errorMessage = null;
 
-      // Save score to global Firebase database
-      console.log(`Calling Firebase saveScore with: ${playerName}, ${playerScore}`);
-      const result = await saveScore(playerName, playerScore);
-      console.log("Firebase save result:", result);
+      // Save score to global Firebase database if connected
+      if (isConnected) {
+        try {
+          debugText.setText(`Saving to Firebase: ${playerName}, ${playerScore}`);
+          console.log(`Calling Firebase saveScore with: ${playerName}, ${playerScore}`);
+          const result = await saveScore(playerName, playerScore);
+          console.log("Firebase save result:", result);
+          submitSuccess = true;
+          debugText.setText(`Firebase save successful: ${result.key}`);
+        } catch (firebaseError) {
+          console.error("Firebase save error:", firebaseError);
+          errorMessage = firebaseError.message;
+          debugText.setText(`Firebase save error: ${errorMessage}`);
+        }
+      }
 
-      // Also save locally for offline play
+      // Always save locally (either as backup or primary if Firebase fails)
       try {
+        debugText.setText(submitSuccess ? 'Saving local backup...' : 'Saving locally only...');
         const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
         scores.push({
           name: playerName,
@@ -19509,56 +19693,52 @@ class GameScene extends Phaser.Scene {
         scores.sort((a, b) => b.score - a.score);
         localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
         console.log("Score saved locally");
+        debugText.setText(submitSuccess ? 'Saved to global and local leaderboards' : 'Saved to local leaderboard only');
       } catch (localError) {
         console.error("Error saving score locally:", localError);
+        debugText.setText(`Local save error: ${localError.message}`);
+        if (!submitSuccess) {
+          // Both saves failed!
+          throw new Error("Failed to save score anywhere");
+        }
       }
 
       // Remove loading indicator
       loadingText.destroy();
 
-      // Show success message
-      const successText = this.add.text(400, 580, 'Score saved to global leaderboard!', {
+      // Show appropriate success message
+      const successText = this.add.text(400, 580, submitSuccess ? 'Score saved to global leaderboard!' : 'Score saved to local leaderboard only', {
         font: '20px Arial',
-        fill: '#00FF00'
+        fill: submitSuccess ? '#00FF00' : '#FF9900'
       });
       successText.setOrigin(0.5);
 
+      // Remove debug text after a delay
+      this.time.delayedCall(3000, () => {
+        debugText.destroy();
+      });
+
       // Start menu scene after a short delay
-      this.time.delayedCall(1500, () => {
+      this.time.delayedCall(3000, () => {
         this.transitionToScene('MenuScene');
       });
     } catch (error) {
-      console.error('Error saving score to Firebase:', error);
+      console.error('Critical error saving score:', error);
 
       // Remove loading indicator
       loadingText.destroy();
 
-      // If there's an error with Firebase, still save locally
-      try {
-        const playerName = String(name || "Player").trim() || "Player";
-        const playerScore = Number(score) || 0;
-        const scores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]');
-        scores.push({
-          name: playerName,
-          score: playerScore,
-          date: new Date().toISOString()
-        });
-        scores.sort((a, b) => b.score - a.score);
-        localStorage.setItem('spaceDogScores', JSON.stringify(scores.slice(0, 10))); // Keep top 10
-        console.log("Score saved locally after Firebase error");
-      } catch (localError) {
-        console.error("Error saving score locally after Firebase error:", localError);
-      }
-
       // Show error message
-      const errorText = this.add.text(400, 580, 'Saved locally. Could not connect to global leaderboard.', {
+      const errorText = this.add.text(400, 580, `Error: ${error.message}`, {
         font: '20px Arial',
-        fill: '#FF9900'
+        fill: '#FF0000'
       });
       errorText.setOrigin(0.5);
 
-      // Start menu scene after a short delay
-      this.time.delayedCall(2000, () => {
+      // Leave debug text visible for troubleshooting
+
+      // Start menu scene after a longer delay
+      this.time.delayedCall(5000, () => {
         this.transitionToScene('MenuScene');
       });
     }
@@ -19662,6 +19842,26 @@ class GameScene extends Phaser.Scene {
       console.warn(`Scene '${sceneName}' not found, restarting game instead.`);
     }
   }
+
+  // Test Firebase connection and functionality
+  async testFirebaseConnection() {
+    console.log("Testing Firebase connection directly...");
+    try {
+      // First, test connection
+      const isConnected = await testConnection();
+      console.log(`Firebase connection test result: ${isConnected ? "Connected" : "Disconnected"}`);
+      if (!isConnected) {
+        console.error("Firebase connection test failed");
+        return;
+      }
+
+      // Try to submit a test score
+      const testResult = await saveScore("Test_" + new Date().getTime(), 1);
+      console.log("Firebase test submission successful:", testResult.key);
+    } catch (error) {
+      console.error("Firebase test error:", error);
+    }
+  }
 }
 ;// ./src/game/scenes/LeaderboardScene.js
 
@@ -19679,6 +19879,7 @@ class LeaderboardScene extends Phaser.Scene {
     this.scores = [];
     this.localScores = [];
     this.isLoading = true;
+    this.connectionStatus = 'checking'; // 'checking', 'connected', 'disconnected'
   }
   create() {
     // Add background
@@ -19754,8 +19955,19 @@ class LeaderboardScene extends Phaser.Scene {
       this.updateLeaderboard();
     });
 
+    // Create connection status indicator
+    this.connectionIndicator = this.add.text(400, 100, 'Checking connection...', {
+      font: '18px Arial',
+      fill: '#ffff00',
+      backgroundColor: '#333333',
+      padding: {
+        x: 10,
+        y: 5
+      }
+    }).setOrigin(0.5);
+
     // Create leaderboard container
-    this.container = this.add.container(400, 200);
+    this.container = this.add.container(400, 240);
 
     // Show loading message
     this.loadingText = this.add.text(400, 300, 'Loading scores...', {
@@ -19767,8 +19979,50 @@ class LeaderboardScene extends Phaser.Scene {
     // Get local scores
     this.localScores = JSON.parse(localStorage.getItem('spaceDogScores') || '[]').sort((a, b) => b.score - a.score).slice(0, 10); // Only show top 10
 
-    // Load global scores
-    this.loadGlobalScores();
+    // Check Firebase connection
+    this.checkFirebaseConnection();
+  }
+  async checkFirebaseConnection() {
+    try {
+      // Test Firebase connection status
+      this.connectionStatus = 'checking';
+      this.connectionIndicator.setText('Checking connection...');
+      this.connectionIndicator.setFill('#ffff00');
+      const isConnected = await testConnection();
+      if (isConnected) {
+        this.connectionStatus = 'connected';
+        this.connectionIndicator.setText('Firebase: Connected');
+        this.connectionIndicator.setFill('#00ff00');
+
+        // Load global scores
+        this.loadGlobalScores();
+      } else {
+        this.connectionStatus = 'disconnected';
+        this.connectionIndicator.setText('Firebase: Disconnected (using local scores)');
+        this.connectionIndicator.setFill('#ff9900');
+
+        // Auto-switch to local if not connected
+        this.isGlobal = false;
+        this.isLoading = false;
+        if (this.loadingText) {
+          this.loadingText.destroy();
+        }
+        this.updateLeaderboard();
+      }
+    } catch (error) {
+      console.error('Error checking Firebase connection:', error);
+      this.connectionStatus = 'disconnected';
+      this.connectionIndicator.setText('Firebase: Error (using local scores)');
+      this.connectionIndicator.setFill('#ff0000');
+
+      // Auto-switch to local on error
+      this.isGlobal = false;
+      this.isLoading = false;
+      if (this.loadingText) {
+        this.loadingText.destroy();
+      }
+      this.updateLeaderboard();
+    }
   }
   async loadGlobalScores() {
     try {
@@ -19781,6 +20035,8 @@ class LeaderboardScene extends Phaser.Scene {
     } catch (error) {
       console.error('Error loading global scores:', error);
       this.isLoading = false;
+      this.connectionIndicator.setText(`Firebase Error: ${error.message}`);
+      this.connectionIndicator.setFill('#ff0000');
       if (this.loadingText) {
         this.loadingText.setText('Could not load global scores. Showing local scores.');
 
@@ -19794,9 +20050,37 @@ class LeaderboardScene extends Phaser.Scene {
     }
   }
   updateLeaderboard() {
-    // Update title and toggle button
-    this.titleText.setText(this.isGlobal ? 'Global Leaderboard' : 'Local Leaderboard');
-    this.toggleButton.setText(this.isGlobal ? 'Switch to Local' : 'Switch to Global');
+    // Update title and toggle button based on connection status
+    if (this.isGlobal) {
+      this.titleText.setText('Global Leaderboard');
+      this.toggleButton.setText('Switch to Local');
+
+      // If we're not connected but trying to show global, force local
+      if (this.connectionStatus !== 'connected') {
+        this.isGlobal = false;
+        this.titleText.setText('Local Leaderboard');
+        this.toggleButton.setText('Global Unavailable');
+        this.toggleButton.disableInteractive();
+        this.toggleButton.setStyle({
+          backgroundColor: '#666666'
+        });
+      }
+    } else {
+      this.titleText.setText('Local Leaderboard');
+      if (this.connectionStatus === 'connected') {
+        this.toggleButton.setText('Switch to Global');
+        this.toggleButton.setInteractive();
+        this.toggleButton.setStyle({
+          backgroundColor: '#333333'
+        });
+      } else {
+        this.toggleButton.setText('Global Unavailable');
+        this.toggleButton.disableInteractive();
+        this.toggleButton.setStyle({
+          backgroundColor: '#666666'
+        });
+      }
+    }
 
     // Clear existing scores
     this.container.removeAll();
