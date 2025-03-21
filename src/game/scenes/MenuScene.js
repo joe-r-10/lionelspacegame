@@ -10,8 +10,8 @@ export default class MenuScene extends Phaser.Scene {
 
     create() {
         // Add background
-        this.add.tileSprite(400, 300, 800, 600, 'background');
-        this.add.tileSprite(400, 300, 800, 600, 'stars');
+        this.background = this.add.tileSprite(400, 300, 800, 600, 'background');
+        this.stars = this.add.tileSprite(400, 300, 800, 600, 'stars');
 
         // Create main container
         const mainContainer = this.add.container(400, 300);
@@ -121,6 +121,11 @@ export default class MenuScene extends Phaser.Scene {
             });
             controlsText.setOrigin(0.5);
         }
+    }
+
+    update() {
+        // Scroll the stars background
+        this.stars.tilePositionY -= 0.5;
     }
 
     addPreviewItem(container, x, y, sprite, label, scale = 1) {
